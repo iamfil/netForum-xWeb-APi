@@ -1,0 +1,275 @@
+<?php
+
+use netForum\xWeb\Xml\Generated\GetDateTime;
+use netForum\xWeb\Xml\Generated\GetVersion;
+use netForum\xWeb\Xml\Generated\TestConnection;
+
+/**
+ * Implements hook_permission().
+ */
+function netforum_xweb_api_permission() {
+  return array(
+    'administer netforum' => array(
+      'title' => t('Administer netForum'),
+      'description' => t('Allows users to configure netForum settings.'),
+      'restrict access' => TRUE
+    )
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function netforum_xweb_api_menu() {
+  $items = array();
+
+  $items['admin/config/netforum'] = array(
+    'title' => 'netForum',
+    'description' => 'netForum related settings.',
+    'page callback' => 'system_admin_menu_block_page',
+    'access arguments' => array('administer netforum'),
+    'file' => 'system.admin.inc',
+    'file path' => drupal_get_path('module', 'system')
+  );
+
+  // Menu item for xweb settings
+  $items['admin/config/netforum/xweb_settings'] = array(
+    'title' => 'xWeb Settings',
+    'description' => 'Configuration options for xWeb, such as the endpoint, xweb
+      user, and caching.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('netforum_xweb_api_settings_form'),
+    'access arguments' => array('administer netforum')
+  );
+
+  return $items;
+}
+
+/**
+ * Return a form to configure xweb settings.
+ */
+function netforum_xweb_api_settings_form($form, &$form_state) {
+  $form['netforum_xweb_api_settings'] = array();
+
+  // xWeb Endpoint
+  $form['netforum_xweb_api_settings']['xweb_endpoint'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Endpoint')
+  );
+
+  $form['netforum_xweb_api_settings']['xweb_endpoint']['xweb_endpoint_url'] = array(
+    '#type' => 'textfield',
+    '#title' => t('URL'),
+    '#description' => t('The URL for the netForum xWeb XML Web Service WSDL file
+    (e.g https://example.com/xWeb/secure/netForumXML.asmx?WSDL).'),
+    '#default_value' => variable_get('xweb_endpoint_url'),
+    '#required' => TRUE,
+    '#maxlength' => 2000
+  );
+
+  $form['netforum_xweb_api_settings']['xweb_endpoint']['xweb_endpoint_username'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Username'),
+    '#description' => t('Username to use for xWeb authentication.'),
+    '#default_value' => variable_get('xweb_endpoint_username'),
+    '#required' => TRUE,
+    '#maxlength' => 64
+  );
+
+  $form['netforum_xweb_api_settings']['xweb_endpoint']['xweb_endpoint_password'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Password'),
+    '#description' => t('Password to use for xWeb authentication.'),
+    '#default_value' => variable_get('xweb_endpoint_password'),
+    '#required' => TRUE,
+    '#maxlength' => 80
+  );
+
+  // Caching
+  $form['netforum_xweb_api_settings']['xweb_cache'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Cache')
+  );
+
+  // @formatter:off
+  $period = drupal_map_assoc(array(0, 60, 180, 300, 600, 900, 1800, 2700, 3600, 10800, 21600, 32400, 43200, 86400), 'format_interval');
+  $period[0] = '<' . t('none') . '>';
+  // @formatter:on
+  $form['netforum_xweb_api_settings']['xweb_cache']['xweb_cache_lifetime'] = array(
+    '#type' => 'select',
+    '#title' => t('Minimum cache lifetime'),
+    '#options' => $period,
+    '#default_value' => variable_get('xweb_cache_lifetime', 0),
+    '#description' => 'Enable using Drupal\'s caching layer to cache the response for certain xWeb requests.'
+  );
+//TODO: implement caching using Drupal's caching layer
+  // Debugging
+  $form['netforum_xweb_api_settings']['xweb_debug'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Debug')
+  );
+
+  $form['netforum_xweb_api_settings']['xweb_debug']['xweb_debug_log_all'] = array(
+    '#type' => 'select',
+    '#title' => t('Log All Requests and Responses'),
+    '#options' => array(
+      0 => t('Disabled'),
+      1 => t('Enabled')
+    ),
+    '#default_value' => variable_get('xweb_debug_log_all', 0),
+    '#description' => t('Enable/Disable logging all requests sent and responses
+      received from netForum xWeb. This option should not be enabled on production.
+      It will save sensitive information into the watchdog log in addition to
+      filling it up with lots of messages.')
+  );
+
+  $debugLogBackends = array(0 => t('Drupal Watchdog'));
+  if (module_exists('devel')) {
+    $debugLogBackends[1] = t('Drupal Devel Module');
+  }
+  $form['netforum_xweb_api_settings']['xweb_debug']['xweb_debug_log_backend'] = array(
+    '#type' => 'select',
+    '#title' => t('Logging Backend'),
+    '#options' => $debugLogBackends,
+    '#default_value' => variable_get('xweb_debug_log_backend', 0),
+    '#description' => t('Select a backend to use for message logging. The Drupal
+      Watchdog backend will place all messages in the Drupal Watchdog log. The
+      Drupal Devel module backend (requires devel module) will write all log
+      messages onto pages.')
+  );
+
+  // Test settings
+  $form['netforum_xweb_api_settings']['xweb_test_container'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Test Settings')
+  );
+
+  // if we have messages from a previous test, display them.
+  if ($form_state['rebuild'] === TRUE && isset($form_state['storage']['xweb_test_message'])) {
+    $markup = '<ul id="xweb_test_message_list">';
+    foreach ($form_state['storage']['xweb_test_message'] as $message) {
+      $markup .= '<li>' . $message . '</li>';
+    }
+    $markup .= '</ul>';
+
+    $form['netforum_xweb_api_settings']['xweb_test_container']['xweb_test_messages'] = array(
+      '#markup' => $markup
+    );
+  }
+
+  $form['netforum_xweb_api_settings']['xweb_test_container']['xweb_test_button'] = array(
+    '#type' => 'button',
+    '#value' => t('Test'),
+    '#name' => 'xweb_test_button'
+  );
+
+  return system_settings_form($form);
+}
+
+function netforum_xweb_api_settings_form_alter(&$form, &$form_state, $form_id) {
+  $form['netforum_xweb_api_settings']['xweb_test_container']['xweb_test_message']['#markup'] = 'test';
+}
+
+/**
+ * Validate the xweb settings form and handle test button clicks.
+ */
+function netforum_xweb_api_settings_form_validate($form, &$form_state) {
+  //test URL field
+  if (!valid_url($form_state['values']['xweb_endpoint_url'], TRUE)) {
+    form_set_error('xweb_endpoint_url', t('You must enter a valid URL.'));
+  }
+
+  if ($form_state['values']['xweb_debug_log_backend'] === '1') {
+    // Check if Devel is available, don't want to add a dependency on it to the
+    // entire module.
+    if (!module_exists('devel')) {
+      form_set_error('xweb_debug_log_backend', t('The Devel module must be enabled
+        in order to use the Drupal Devel module backend'));
+    }
+  }
+
+  // Handle the test button
+  if ($form_state['clicked_button']['#name'] === 'xweb_test_button'
+    && is_array(form_get_errors()) === FALSE
+  ) {
+    drupal_set_message(t('Your settings have not been saved!'), 'warning', FALSE);
+
+    $statusMessages = array();
+    if (netforum_xweb_api_settings_test($form_state, $statusMessages)) {
+      drupal_set_message(t('The settings below appear to be ok!'), 'status', FALSE);
+    }
+    else {
+      drupal_set_message(t('There was an issue with the settings below.'), 'error', FALSE);
+    }
+
+    $form_state['storage']['xweb_test_message'] = $statusMessages;
+  }
+}
+
+/**
+ * Test the settings the user has entered on the configuration form. If everything
+ * works, return TRUE. Otherwise, return FALSE.
+ *
+ * @param $form_state
+ * @param $statusMessages Reference to array that will hold status messages.
+ * @return bool
+ */
+function netforum_xweb_api_settings_test($form_state, &$statusMessages) {
+  // Try to create an instance and login
+  try {
+    $netForumXML = netForumXMLApiFactory::createInstance(new DrupalNetForumXMLApiConfigTest($form_state['values']));
+
+    $statusMessages[] = t('Successfully created an instance of netForumXMLApi.');
+
+    $statusMessages[] = t('Successfully able to Authenticate. Authorization token is: ' . $netForumXML->GetAuthorizationToken());
+  }
+  catch (Exception $e) {
+    $statusMessages[] = t('Failed to create an instance of netForumXMLApi.');
+
+    return FALSE;
+  }
+
+  // Try to test the connection
+  try {
+    $response = $netForumXML->TestConnection(new TestConnection());
+
+    $statusMessages[] = t('Successfully able to call TestConnection web method.
+      DB Connection Test: ' . $response->getTestConnectionResult());
+  }
+  catch (Exception $e) {
+    $statusMessages[] = t('Failed to call TestConnection web method.');
+
+    return FALSE;
+  }
+
+  // Try to get the DateTime of the server
+  try {
+    $response = $netForumXML->GetDateTime(new GetDateTime());
+
+    $netForumTime = $response->getGetDateTimeResult()
+      ->format(DateTime::COOKIE);
+
+    $statusMessages[] = t('Successfully able to call GetDateTime web method. Time
+      on xWeb server is: ' . $netForumTime);
+  }
+  catch (Exception $e) {
+    $statusMessages[] = t('Failed to call GetDateTime web method.');
+
+    return FALSE;
+  }
+
+  // Try to get version netForum
+  try {
+    $response = $netForumXML->GetVersion(new GetVersion());
+
+    $statusMessages[] = t('Successfully able to call GetVersion web method. netForum
+      Build: ' . $response->getGetVersionResult()->getBuild());
+  }
+  catch (Exception $e) {
+    $statusMessages[] = t('Failed to call GetVersion() method.');
+
+    return FALSE;
+  }
+
+  return TRUE;
+}

@@ -1,0 +1,5 @@
+#Ignore IDE files
+.idea/*
+
+#Ignore the vendor directory from composer
+vendor/*
