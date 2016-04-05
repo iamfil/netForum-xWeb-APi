@@ -27,6 +27,4 @@ interface InetForumXMLApiConfig {
    * @return bool
    */
   public function getLogDebugEnabled();
-
-  public function getCacheHandler();
 }

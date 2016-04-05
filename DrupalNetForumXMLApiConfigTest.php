@@ -56,9 +56,4 @@ class DrupalNetForumXMLApiConfigTest extends DrupalNetForumXMLApiConfig {
   public function getLogDebugEnabled() {
     return $this->drupalFormValues['xweb_debug_log_all'] == 1;
   }
-
-  public function getCacheHandler() {
-    // Disable cache when testing.
-    return NULL;
-  }
 }

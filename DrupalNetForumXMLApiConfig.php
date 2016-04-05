@@ -48,11 +48,4 @@ class DrupalNetForumXMLApiConfig implements InetForumXMLApiConfig {
   public function getLogDebugEnabled() {
     return variable_get('xweb_debug_log_all') == 1;
   }
-
-  /**
-   *
-   */
-  public function getCacheHandler() {
-
-  }
 }
